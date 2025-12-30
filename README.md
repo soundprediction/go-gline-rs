@@ -1,6 +1,6 @@
 # go-gline-rs
 
-Go bindings for [GLiNER](https://github.com/urchade/GLiNER).This library allows you to perform Named Entity Recognition (NER) and Relation Extraction using GLiNER models directly in your Go applications.
+Go bindings for [GLiNER](https://github.com/urchade/GLiNER), or specifically for the excellent Rust implementation [gliner-rs](https://github.com/fbilhaut/gline-rs). This library allows you to perform Named Entity Recognition (NER) and Relation Extraction using GLiNER models directly in your Go applications.
 
 ## Features
 
@@ -37,11 +37,9 @@ func main() {
 		log.Fatalf("Failed to initialize gline: %v", err)
 	}
 
-	modelPath := "path/to/model.onnx"
-	tokenizerPath := "path/to/tokenizer.json"
-
-	// Load the model (use NewTokenModel for token-based models)
-	model, err := gline.NewSpanModel(modelPath, tokenizerPath)
+	// You can load a model directly from Hugging Face:
+	modelID := "onnx-community/gliner_small-v2.1"
+	model, err := gline.NewSpanModelFromHF(modelID)
 	if err != nil {
 		log.Fatalf("Failed to load model: %v", err)
 	}

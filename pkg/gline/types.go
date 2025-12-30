@@ -61,6 +61,24 @@ func NewTokenModel(modelPath, tokenizerPath string) (*Model, error) {
 	return &Model{ptr: ptr, isToken: true}, nil
 }
 
+// NewSpanModelFromHF loads a Span model directly from Hugging Face
+func NewSpanModelFromHF(modelID string) (*Model, error) {
+	modelPath, tokenizerPath, err := DownloadModel(modelID, "")
+	if err != nil {
+		return nil, err
+	}
+	return NewSpanModel(modelPath, tokenizerPath)
+}
+
+// NewTokenModelFromHF loads a Token model directly from Hugging Face
+func NewTokenModelFromHF(modelID string) (*Model, error) {
+	modelPath, tokenizerPath, err := DownloadModel(modelID, "")
+	if err != nil {
+		return nil, err
+	}
+	return NewTokenModel(modelPath, tokenizerPath)
+}
+
 func (m *Model) Close() {
 	if m.ptr != nil {
 		if m.isToken {

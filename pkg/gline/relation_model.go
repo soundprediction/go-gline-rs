@@ -40,6 +40,15 @@ func NewRelationModel(modelPath, tokenizerPath string) (*RelationModel, error) {
 	return &RelationModel{ptr: ptr}, nil
 }
 
+// NewRelationModelFromHF loads a Relation model directly from Hugging Face
+func NewRelationModelFromHF(modelID string) (*RelationModel, error) {
+	modelPath, tokenizerPath, err := DownloadModel(modelID, "")
+	if err != nil {
+		return nil, err
+	}
+	return NewRelationModel(modelPath, tokenizerPath)
+}
+
 func (r *RelationModel) Close() {
 	if r.ptr != nil {
 		C.call_free_relation_model(fnFreeRelationModel, r.ptr)
