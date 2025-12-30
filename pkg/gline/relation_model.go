@@ -33,7 +33,7 @@ func NewRelationModel(modelPath, tokenizerPath string) (*RelationModel, error) {
 	defer C.free(unsafe.Pointer(cMod))
 	defer C.free(unsafe.Pointer(cTok))
 
-	ptr := C.call_new_relation_model(fnNewRelationModel, cMod, cTok)
+	ptr := C._gl_call_new_relation_model(fnNewRelationModel, cMod, cTok)
 	if ptr == nil {
 		return nil, errors.New("failed to create relation model")
 	}
@@ -51,7 +51,7 @@ func NewRelationModelFromHF(modelID string) (*RelationModel, error) {
 
 func (r *RelationModel) Close() {
 	if r.ptr != nil {
-		C.call_free_relation_model(fnFreeRelationModel, r.ptr)
+		C._gl_call_free_relation_model(fnFreeRelationModel, r.ptr)
 		r.ptr = nil
 	}
 }
@@ -82,7 +82,7 @@ func (r *RelationModel) AddRelationSchema(relation string, headTypes []string, t
 		cTails[i] = cStr
 	}
 
-	C.call_add_relation_schema(fnAddRelationSchema, r.ptr, cRel,
+	C._gl_call_add_relation_schema(fnAddRelationSchema, r.ptr, cRel,
 		(**C.char)(unsafe.Pointer(&cHeads[0])), C.size_t(len(headTypes)),
 		(**C.char)(unsafe.Pointer(&cTails[0])), C.size_t(len(tailTypes)))
 
@@ -109,14 +109,14 @@ func (r *RelationModel) Predict(texts []string, entityLabels []string) ([][]Rela
 		cLabels[i] = cStr
 	}
 
-	res := C.call_inference_relation(fnInferenceRelation, r.ptr,
+	res := C._gl_call_inference_relation(fnInferenceRelation, r.ptr,
 		(**C.char)(unsafe.Pointer(&cTexts[0])), C.size_t(len(texts)),
 		(**C.char)(unsafe.Pointer(&cLabels[0])), C.size_t(len(entityLabels)))
 
 	if res == nil {
 		return nil, errors.New("relation inference failed")
 	}
-	defer C.call_free_relation_result(fnFreeRelationResult, res)
+	defer C._gl_call_free_relation_result(fnFreeRelationResult, res)
 
 	// Parse result
 	count := int(res.count)

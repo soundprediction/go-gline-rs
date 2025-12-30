@@ -5,55 +5,55 @@ package gline
 #include "gline.h"
 
 // Implementation of Wrappers
-static void* open_lib(const char* path) {
+static void* _gl_open_lib(const char* path) {
     return dlopen(path, RTLD_LAZY | RTLD_GLOBAL);
 }
 
-static char* get_dlerror() {
+static char* _gl_get_dlerror() {
     return dlerror();
 }
 
-static void* get_sym(void* handle, const char* name) {
+static void* _gl_get_sym(void* handle, const char* name) {
     return dlsym(handle, name);
 }
 
-void* call_new_span_model(void* f, const char* m, const char* t) {
+void* _gl_call_new_span_model(void* f, const char* m, const char* t) {
     return ((new_span_model_t)f)(m, t);
 }
-BatchResult* call_inference_span(void* f, void* w, const char** i, size_t ic, const char** l, size_t lc) {
+BatchResult* _gl_call_inference_span(void* f, void* w, const char** i, size_t ic, const char** l, size_t lc) {
     return ((inference_span_t)f)(w, i, ic, l, lc);
 }
-void call_free_span_model(void* f, void* w) {
+void _gl_call_free_span_model(void* f, void* w) {
     ((free_span_model_t)f)(w);
 }
 
-void* call_new_token_model(void* f, const char* m, const char* t) {
+void* _gl_call_new_token_model(void* f, const char* m, const char* t) {
     return ((new_token_model_t)f)(m, t);
 }
-BatchResult* call_inference_token(void* f, void* w, const char** i, size_t ic, const char** l, size_t lc) {
+BatchResult* _gl_call_inference_token(void* f, void* w, const char** i, size_t ic, const char** l, size_t lc) {
     return ((inference_token_t)f)(w, i, ic, l, lc);
 }
-void call_free_token_model(void* f, void* w) {
+void _gl_call_free_token_model(void* f, void* w) {
     ((free_token_model_t)f)(w);
 }
 
-static void call_free_batch_result(void* f, BatchResult* r) {
+void _gl_call_free_batch_result(void* f, BatchResult* r) {
     ((free_batch_result_t)f)(r);
 }
 
-void* call_new_relation_model(void* f, const char* m, const char* t) {
+void* _gl_call_new_relation_model(void* f, const char* m, const char* t) {
     return ((new_relation_model_t)f)(m, t);
 }
-void call_add_relation_schema(void* f, void* w, const char* r, const char** ht, size_t hc, const char** tt, size_t tc) {
+void _gl_call_add_relation_schema(void* f, void* w, const char* r, const char** ht, size_t hc, const char** tt, size_t tc) {
     ((add_relation_schema_t)f)(w, r, ht, hc, tt, tc);
 }
-BatchRelationResult* call_inference_relation(void* f, void* w, const char** i, size_t ic, const char** el, size_t elc) {
+BatchRelationResult* _gl_call_inference_relation(void* f, void* w, const char** i, size_t ic, const char** el, size_t elc) {
     return ((inference_relation_t)f)(w, i, ic, el, elc);
 }
-void call_free_relation_model(void* f, void* w) {
+void _gl_call_free_relation_model(void* f, void* w) {
     ((free_relation_model_t)f)(w);
 }
-void call_free_relation_result(void* f, BatchRelationResult* r) {
+void _gl_call_free_relation_result(void* f, BatchRelationResult* r) {
     ((free_relation_result_t)f)(r);
 }
 */
@@ -178,16 +178,16 @@ func Init() error {
 
 	cDest := C.CString(dest)
 	defer C.free(unsafe.Pointer(cDest))
-	dlHandle = C.open_lib(cDest)
+	dlHandle = C._gl_open_lib(cDest)
 	if dlHandle == nil {
-		cErr := C.get_dlerror()
+		cErr := C._gl_get_dlerror()
 		return fmt.Errorf("dlopen failed: %s", C.GoString(cErr))
 	}
 
 	loadSym := func(name string) (unsafe.Pointer, error) {
 		cName := C.CString(name)
 		defer C.free(unsafe.Pointer(cName))
-		sym := C.get_sym(dlHandle, cName)
+		sym := C._gl_get_sym(dlHandle, cName)
 		if sym == nil {
 			return nil, fmt.Errorf("symbol not found: %s", name)
 		}

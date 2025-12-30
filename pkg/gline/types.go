@@ -36,7 +36,7 @@ func NewSpanModel(modelPath, tokenizerPath string) (*Model, error) {
 	defer C.free(unsafe.Pointer(cMod))
 	defer C.free(unsafe.Pointer(cTok))
 
-	ptr := C.call_new_span_model(fnNewSpanModel, cMod, cTok)
+	ptr := C._gl_call_new_span_model(fnNewSpanModel, cMod, cTok)
 	if ptr == nil {
 		return nil, errors.New("failed to create span model")
 	}
@@ -54,7 +54,7 @@ func NewTokenModel(modelPath, tokenizerPath string) (*Model, error) {
 	defer C.free(unsafe.Pointer(cMod))
 	defer C.free(unsafe.Pointer(cTok))
 
-	ptr := C.call_new_token_model(fnNewTokenModel, cMod, cTok)
+	ptr := C._gl_call_new_token_model(fnNewTokenModel, cMod, cTok)
 	if ptr == nil {
 		return nil, errors.New("failed to create token model")
 	}
@@ -82,9 +82,9 @@ func NewTokenModelFromHF(modelID string) (*Model, error) {
 func (m *Model) Close() {
 	if m.ptr != nil {
 		if m.isToken {
-			C.call_free_token_model(fnFreeTokenModel, m.ptr)
+			C._gl_call_free_token_model(fnFreeTokenModel, m.ptr)
 		} else {
-			C.call_free_span_model(fnFreeSpanModel, m.ptr)
+			C._gl_call_free_span_model(fnFreeSpanModel, m.ptr)
 		}
 		m.ptr = nil
 	}
@@ -112,11 +112,11 @@ func (m *Model) Predict(texts []string, labels []string) ([][]Entity, error) {
 
 	var res *C.BatchResult
 	if m.isToken {
-		res = C.call_inference_token(fnInferenceToken, m.ptr,
+		res = C._gl_call_inference_token(fnInferenceToken, m.ptr,
 			(**C.char)(unsafe.Pointer(&cTexts[0])), C.size_t(len(texts)),
 			(**C.char)(unsafe.Pointer(&cLabels[0])), C.size_t(len(labels)))
 	} else {
-		res = C.call_inference_span(fnInferenceSpan, m.ptr,
+		res = C._gl_call_inference_span(fnInferenceSpan, m.ptr,
 			(**C.char)(unsafe.Pointer(&cTexts[0])), C.size_t(len(texts)),
 			(**C.char)(unsafe.Pointer(&cLabels[0])), C.size_t(len(labels)))
 	}
@@ -124,7 +124,7 @@ func (m *Model) Predict(texts []string, labels []string) ([][]Entity, error) {
 	if res == nil {
 		return nil, errors.New("inference failed")
 	}
-	defer C.call_free_batch_result(fnFreeBatchResult, res)
+	defer C._gl_call_free_batch_result(fnFreeBatchResult, res)
 
 	// Parse result
 	count := int(res.count)
