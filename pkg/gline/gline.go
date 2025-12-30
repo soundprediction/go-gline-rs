@@ -5,15 +5,15 @@ package gline
 #include "gline.h"
 
 // Implementation of Wrappers
-void* open_lib(const char* path) {
+static void* open_lib(const char* path) {
     return dlopen(path, RTLD_LAZY | RTLD_GLOBAL);
 }
 
-char* get_dlerror() {
+static char* get_dlerror() {
     return dlerror();
 }
 
-void* get_sym(void* handle, const char* name) {
+static void* get_sym(void* handle, const char* name) {
     return dlsym(handle, name);
 }
 
@@ -37,7 +37,7 @@ void call_free_token_model(void* f, void* w) {
     ((free_token_model_t)f)(w);
 }
 
-void call_free_batch_result(void* f, BatchResult* r) {
+static void call_free_batch_result(void* f, BatchResult* r) {
     ((free_batch_result_t)f)(r);
 }
 

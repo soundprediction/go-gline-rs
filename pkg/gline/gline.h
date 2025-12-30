@@ -51,9 +51,9 @@ typedef void (*free_relation_model_t)(void*);
 typedef void (*free_relation_result_t)(BatchRelationResult*);
 
 // Function Prototypes for Wrappers (implemented in gline.go preamble or c file)
-void* open_lib(const char* path);
-char* get_dlerror();
-void* get_sym(void* handle, const char* name);
+static void* open_lib(const char* path);
+static char* get_dlerror();
+static void* get_sym(void* handle, const char* name);
 
 void* call_new_span_model(void* f, const char* m, const char* t);
 BatchResult* call_inference_span(void* f, void* w, const char** i, size_t ic, const char** l, size_t lc);
@@ -63,7 +63,7 @@ void* call_new_token_model(void* f, const char* m, const char* t);
 BatchResult* call_inference_token(void* f, void* w, const char** i, size_t ic, const char** l, size_t lc);
 void call_free_token_model(void* f, void* w);
 
-void call_free_batch_result(void* f, BatchResult* r);
+static void call_free_batch_result(void* f, BatchResult* r);
 
 void* call_new_relation_model(void* f, const char* m, const char* t);
 void call_add_relation_schema(void* f, void* w, const char* r, const char** ht, size_t hc, const char** tt, size_t tc);
