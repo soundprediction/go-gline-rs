@@ -1,4 +1,4 @@
-.PHONY: all build test clean rust-mac rust-linux
+.PHONY: all build test clean gliner2 rust-mac rust-linux
 
 # Default target
 all: build
@@ -11,6 +11,12 @@ build:
 test:
 	go test ./...
 
+# Build the GLiNER2 native binding + bundle onnxruntime (host platform) into
+# pkg/gliner2/lib for go:embed.
+gliner2:
+	./scripts/build_gliner2.sh
+
+# --- Deprecated: GLiNER v1 (gline-rs) native library ---
 # Compile Rust library for macOS
 rust-mac:
 	./scripts/compile_rust_mac.sh
@@ -22,4 +28,4 @@ rust-linux:
 # Clean build artifacts
 clean:
 	go clean
-	rm -rf gline_binding/target
+	rm -rf gliner2_binding/target gline_binding/target

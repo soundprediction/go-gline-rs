@@ -1,0 +1,491 @@
+diff -ruN a/src/lib.rs b/src/lib.rs
+--- a/src/lib.rs	2026-06-22 11:03:39.989246533 -0400
++++ b/src/lib.rs	2026-06-22 11:03:39.991694891 -0400
+@@ -180,6 +180,16 @@
+     pub score: f32,
+ }
+ 
++/// A structured/JSON extraction result (PATCH go-gline-rs): one named structure
++/// with zero or more extracted object instances. Each instance is a JSON object
++/// mapping field name -> value (a string for dtype=str, an array of strings for
++/// dtype=list).
++#[derive(Debug, Clone, Serialize)]
++pub struct ExtractedStructure {
++    pub name: String,
++    pub instances: Vec<serde_json::Value>,
++}
++
+ /// Advanced inference parameters.
+ #[derive(Debug, Clone, Copy)]
+ pub struct InferenceParams {
+@@ -375,7 +385,7 @@
+         text: &str, 
+         tasks: &[SchemaTask],
+         params: Option<InferenceParams>
+-    ) -> anyhow::Result<(Vec<ExtractedEntity>, Vec<ExtractedRelation>, Vec<ExtractedClassification>)> {
++    ) -> anyhow::Result<(Vec<ExtractedEntity>, Vec<ExtractedRelation>, Vec<ExtractedClassification>, Vec<ExtractedStructure>)> {
+         let current_mode = *self.execution_mode.read().unwrap();
+         
+         match current_mode {
+@@ -402,7 +412,7 @@
+         text: &str, 
+         tasks: &[SchemaTask],
+         _params: Option<InferenceParams>
+-    ) -> Result<(Vec<ExtractedEntity>, Vec<ExtractedRelation>, Vec<ExtractedClassification>), GlinerError> {
++    ) -> Result<(Vec<ExtractedEntity>, Vec<ExtractedRelation>, Vec<ExtractedClassification>, Vec<ExtractedStructure>), GlinerError> {
+         // TODO: Full IOBinding implementation goes here.
+         // For now, simulate failure to trigger fallback.
+         Err(GlinerError::OomDeviceBinding("IOBinding non ancora implementato, fallback alla modalità Standard.".to_string()))
+@@ -414,7 +424,7 @@
+         text: &str, 
+         tasks: &[SchemaTask],
+         params: Option<InferenceParams>
+-    ) -> anyhow::Result<(Vec<ExtractedEntity>, Vec<ExtractedRelation>, Vec<ExtractedClassification>)> {
++    ) -> anyhow::Result<(Vec<ExtractedEntity>, Vec<ExtractedRelation>, Vec<ExtractedClassification>, Vec<ExtractedStructure>)> {
+         let p = params.unwrap_or_default();
+         let threshold = p.threshold;
+         let flat_ner = p.flat_ner;
+@@ -463,7 +473,7 @@
+         
+         let num_words = record.word_to_token_maps.len();
+         if num_words == 0 {
+-            return Ok((Vec::new(), Vec::new(), Vec::new()));
++            return Ok((Vec::new(), Vec::new(), Vec::new(), Vec::new()));
+         }
+ 
+         let hidden_size = lhs_tensor.shape()[2];
+@@ -556,6 +566,9 @@
+         let mut final_entities = Vec::new();
+         let mut final_relations = Vec::new();
+         let mut final_classifications = Vec::new();
++        // PATCH (go-gline-rs): structured extraction is implemented in the V2 engine;
++        // the V1 path returns no structures.
++        let final_structures: Vec<ExtractedStructure> = Vec::new();
+ 
+         // 4. Parallel Task Execution
+         for task_map in &record.tasks {
+@@ -816,7 +829,7 @@
+             }
+         }
+         
+-        Ok((final_entities, final_relations, final_classifications))
++        Ok((final_entities, final_relations, final_classifications, final_structures))
+     }
+ }
+ 
+@@ -877,7 +890,7 @@
+         text: &str, 
+         tasks: &[SchemaTask],
+         params: Option<InferenceParams>
+-    ) -> anyhow::Result<(Vec<ExtractedEntity>, Vec<ExtractedRelation>, Vec<ExtractedClassification>)> {
++    ) -> anyhow::Result<(Vec<ExtractedEntity>, Vec<ExtractedRelation>, Vec<ExtractedClassification>, Vec<ExtractedStructure>)> {
+         match self {
+             Gliner2Engine::V1(engine) => engine.extract(text, tasks, params),
+             Gliner2Engine::V2(engine) => engine.extract(text, tasks, params),
+diff -ruN a/src/lib_v2.rs b/src/lib_v2.rs
+--- a/src/lib_v2.rs	2026-06-22 11:03:39.989306675 -0400
++++ b/src/lib_v2.rs	2026-06-22 11:03:39.992072435 -0400
+@@ -43,7 +43,8 @@
+     },
+     memory::{AllocationDevice, AllocatorType, MemoryInfo, MemoryType},
+     session::{builder::GraphOptimizationLevel, Session},
+-    value::Tensor,
++    tensor::TensorElementType,
++    value::{Tensor, ValueType},
+ };
+ use tokenizers::Tokenizer;
+ use std::path::Path;
+@@ -51,9 +52,9 @@
+ 
+ use crate::{
+     error::GlinerError,
+-    processor::{SchemaTask, SchemaTransformer},
+-    ExecutionMode, ExtractedClassification, ExtractedEntity, ExtractedRelation, Gliner2Config,
+-    InferenceParams,
++    processor::{Dtype, SchemaTask, SchemaTransformer},
++    ExecutionMode, ExtractedClassification, ExtractedEntity, ExtractedRelation, ExtractedStructure,
++    Gliner2Config, InferenceParams,
+ };
+ 
+ // ─────────────────────────────────────────────────────────────────────────────
+@@ -243,7 +244,7 @@
+         text: &str,
+         tasks: &[SchemaTask],
+         params: Option<InferenceParams>,
+-    ) -> Result<(Vec<ExtractedEntity>, Vec<ExtractedRelation>, Vec<ExtractedClassification>)> {
++    ) -> Result<(Vec<ExtractedEntity>, Vec<ExtractedRelation>, Vec<ExtractedClassification>, Vec<ExtractedStructure>)> {
+         let mode = *self.execution_mode.read().unwrap();
+         match mode {
+             ExecutionMode::IoBinding => {
+@@ -287,7 +288,7 @@
+         text: &str,
+         tasks: &[SchemaTask],
+         params: Option<InferenceParams>,
+-    ) -> Result<(Vec<ExtractedEntity>, Vec<ExtractedRelation>, Vec<ExtractedClassification>), GlinerError> {
++    ) -> Result<(Vec<ExtractedEntity>, Vec<ExtractedRelation>, Vec<ExtractedClassification>, Vec<ExtractedStructure>), GlinerError> {
+         let p = params.unwrap_or_default();
+         let threshold = p.threshold;
+         let flat_ner = p.flat_ner;
+@@ -320,7 +321,7 @@
+ 
+         let num_words = record.word_to_token_maps.len();
+         if num_words == 0 {
+-            return Ok((Vec::new(), Vec::new(), Vec::new()));
++            return Ok((Vec::new(), Vec::new(), Vec::new(), Vec::new()));
+         }
+ 
+         // ── Step 1: Encoder ───────────────────────────────────────────────────
+@@ -433,6 +434,7 @@
+         let mut final_entities       = Vec::new();
+         let mut final_relations      = Vec::new();
+         let mut final_classifications = Vec::new();
++        let mut final_structures: Vec<ExtractedStructure> = Vec::new();
+ 
+         for task_map in &record.tasks {
+             let num_labels = task_map.labels.len();
+@@ -502,16 +504,36 @@
+                 };
+                 let hidden_size = fe_arr.shape()[1];
+ 
+-                let mut padded = Array4::<half::f16>::from_elem((1, num_labels, self.config.max_width, hidden_size), half::f16::from_f32(0.0));
+-                for m in 0..num_labels {
+-                    for d in 0..hidden_size {
+-                        padded[[0, m, 0, d]] = half::f16::from_f32(fe_arr[[m, d]]);
+-                    }
+-                }
+-                let padded_t = oe!(Tensor::from_array(padded), "cls padded tensor");
++                // PATCH (go-gline-rs): build the classifier's span_embeddings input
++                // with the element type the model actually expects. The upstream code
++                // hardcoded f16, which fails on fp32 models (classifier_fp32.onnx) with
++                // "Unexpected input data type. Actual: tensor(float16), expected:
++                // tensor(float)". We inspect the session's input type and pad as f32 or
++                // f16 accordingly, erasing to a DynValue so a single bind handles both.
++                let wants_f16 = matches!(
++                    self.classifier.inputs.first().map(|i| &i.input_type),
++                    Some(ValueType::Tensor { ty: TensorElementType::Float16, .. })
++                );
+ 
+                 let mut b_cls = oe!(self.classifier.create_binding(), "classifier create_binding");
+-                oe!(b_cls.bind_input("span_embeddings", &padded_t), "classifier bind span_embeddings");
++                let padded_dyn = if wants_f16 {
++                    let mut padded = Array4::<half::f16>::from_elem((1, num_labels, self.config.max_width, hidden_size), half::f16::from_f32(0.0));
++                    for m in 0..num_labels {
++                        for d in 0..hidden_size {
++                            padded[[0, m, 0, d]] = half::f16::from_f32(fe_arr[[m, d]]);
++                        }
++                    }
++                    oe!(Tensor::from_array(padded), "cls padded tensor").into_dyn()
++                } else {
++                    let mut padded = Array4::<f32>::from_elem((1, num_labels, self.config.max_width, hidden_size), 0.0f32);
++                    for m in 0..num_labels {
++                        for d in 0..hidden_size {
++                            padded[[0, m, 0, d]] = fe_arr[[m, d]];
++                        }
++                    }
++                    oe!(Tensor::from_array(padded), "cls padded tensor").into_dyn()
++                };
++                oe!(b_cls.bind_input("span_embeddings", &padded_dyn), "classifier bind span_embeddings");
+                 oe!(b_cls.bind_output_to_device(&cls_out_name, &cpu_out_mem), "classifier bind output");
+ 
+                 let logits = {
+@@ -645,10 +667,15 @@
+                         relation_type: task_map.labels[0].clone(),
+                     });
+                 }
++            } else if task_map.task_type == "json_structures" {
++                final_structures.push(decode_structure(
++                    task_map, &scores, &record, text, pred_count, threshold,
++                    self.config.max_width, num_words,
++                ));
+             }
+         }
+ 
+-        Ok((final_entities, final_relations, final_classifications))
++        Ok((final_entities, final_relations, final_classifications, final_structures))
+     }
+ 
+     // ── Standard mode (identico al v1) ───────────────────────────────────────
+@@ -664,7 +691,7 @@
+         text: &str,
+         tasks: &[SchemaTask],
+         params: Option<InferenceParams>,
+-    ) -> Result<(Vec<ExtractedEntity>, Vec<ExtractedRelation>, Vec<ExtractedClassification>)> {
++    ) -> Result<(Vec<ExtractedEntity>, Vec<ExtractedRelation>, Vec<ExtractedClassification>, Vec<ExtractedStructure>)> {
+         let p = params.unwrap_or_default();
+         let threshold = p.threshold;
+         let flat_ner = p.flat_ner;
+@@ -698,7 +725,7 @@
+ 
+         let num_words = record.word_to_token_maps.len();
+         if num_words == 0 {
+-            return Ok((Vec::new(), Vec::new(), Vec::new()));
++            return Ok((Vec::new(), Vec::new(), Vec::new(), Vec::new()));
+         }
+         let hidden_size = hs.shape()[2];
+ 
+@@ -741,6 +768,7 @@
+         let mut final_entities       = Vec::new();
+         let mut final_relations      = Vec::new();
+         let mut final_classifications = Vec::new();
++        let mut final_structures: Vec<ExtractedStructure> = Vec::new();
+ 
+         for task_map in &record.tasks {
+             let num_labels = task_map.labels.len();
+@@ -896,10 +924,15 @@
+                         relation_type: task_map.labels[0].clone(),
+                     });
+                 }
++            } else if task_map.task_type == "json_structures" {
++                final_structures.push(decode_structure(
++                    task_map, &scores, &record, text, pred_count, threshold,
++                    self.config.max_width, num_words,
++                ));
+             }
+         }
+ 
+-        Ok((final_entities, final_relations, final_classifications))
++        Ok((final_entities, final_relations, final_classifications, final_structures))
+     }
+ }
+ 
+@@ -907,3 +940,85 @@
+ // Baked nei modelli count_lstm_fixed (output shape fisso [MAX_COUNT, M, H]).
+ #[allow(dead_code)]
+ const MAX_COUNT: usize = 20;
++
++/// PATCH (go-gline-rs): decode a `json_structures` task into an [`ExtractedStructure`].
++///
++/// Reuses the entity span-score tensor `scores[instance, start, width, field]`. Each
++/// count index is one object instance; each field (label column) is span-extracted from
++/// the text. dtype `Str` takes the first span in (start,width) order (matching Python's
++/// `spans[0]`); dtype `List` takes all spans, confidence-sorted with greedy char-overlap
++/// removal (matching Python's `_format_spans`). Choice restriction is NOT applied — the
++/// engine has no schema-prefix span scores — so choice fields are span-extracted too.
++fn decode_structure(
++    task_map: &crate::processor::TaskMapping,
++    scores: &ndarray::ArrayD<f32>,
++    record: &crate::processor::ProcessedRecord,
++    text: &str,
++    pred_count: usize,
++    threshold: f32,
++    max_width: usize,
++    num_words: usize,
++) -> ExtractedStructure {
++    let mut instances = Vec::new();
++    for c_idx in 0..pred_count {
++        let mut obj = serde_json::Map::new();
++        let mut any = false;
++        for (m, field_name) in task_map.labels.iter().enumerate() {
++            // Candidate spans for (instance c_idx, field m), in (start, width) order.
++            let mut cands: Vec<(f32, usize, usize, String)> = Vec::new(); // (score, char_start, char_end, text)
++            for start in 0..num_words {
++                for width_idx in 0..max_width {
++                    let end = std::cmp::min(start + width_idx + 1, num_words);
++                    let prob = scores[[c_idx, start, width_idx, m]];
++                    if prob > threshold {
++                        let char_start = record.word_to_char_maps[start].0;
++                        let char_end = record.word_to_char_maps[end - 1].1;
++                        if char_start <= char_end && char_end <= text.len() {
++                            let t = text[char_start..char_end].trim().to_string();
++                            if !t.is_empty() {
++                                cands.push((prob, char_start, char_end, t));
++                            }
++                        }
++                    }
++                }
++            }
++
++            let dtype = task_map.field_dtypes.get(m).copied().unwrap_or(Dtype::List);
++            match dtype {
++                Dtype::Str => {
++                    if let Some((_, _, _, t)) = cands.first() {
++                        obj.insert(field_name.clone(), serde_json::Value::String(t.clone()));
++                        any = true;
++                    } else {
++                        obj.insert(field_name.clone(), serde_json::Value::Null);
++                    }
++                }
++                Dtype::List => {
++                    cands.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap_or(std::cmp::Ordering::Equal));
++                    let mut selected: Vec<(usize, usize, String)> = Vec::new();
++                    for (_s, cs, ce, t) in cands {
++                        let overlap = selected.iter().any(|(s, e, _)| !(ce <= *s || cs >= *e));
++                        if !overlap {
++                            selected.push((cs, ce, t));
++                        }
++                    }
++                    let arr: Vec<serde_json::Value> = selected
++                        .into_iter()
++                        .map(|(_, _, t)| serde_json::Value::String(t))
++                        .collect();
++                    if !arr.is_empty() {
++                        any = true;
++                    }
++                    obj.insert(field_name.clone(), serde_json::Value::Array(arr));
++                }
++            }
++        }
++        if any {
++            instances.push(serde_json::Value::Object(obj));
++        }
++    }
++    ExtractedStructure {
++        name: task_map.task_name.clone(),
++        instances,
++    }
++}
+diff -ruN a/src/processor.rs b/src/processor.rs
+--- a/src/processor.rs	2026-06-22 11:03:39.989360375 -0400
++++ b/src/processor.rs	2026-06-22 11:03:39.991317567 -0400
+@@ -31,6 +31,26 @@
+ pub const OUTPUT_TOKEN: &str = "[OUTPUT]";
+ pub const DESC_TOKEN: &str = "[DESCRIPTION]";
+ 
++/// Value cardinality of a structured-extraction field.
++#[derive(Debug, Clone, Copy, PartialEq, Eq)]
++pub enum Dtype {
++    /// Single value (first/best span). Output is a string (or null).
++    Str,
++    /// Multiple values. Output is an array of strings (possibly empty).
++    List,
++}
++
++/// One field of a structured-extraction task (PATCH go-gline-rs).
++#[derive(Debug, Clone)]
++pub struct StructField {
++    pub name: String,
++    pub dtype: Dtype,
++    /// Restricted choice set (e.g. `field::[a|b|c]`). Currently informational:
++    /// the Rust engine span-extracts the value from text rather than scoring
++    /// against the schema-prefix columns (which it does not compute).
++    pub choices: Option<Vec<String>>,
++}
++
+ #[derive(Debug, Clone)]
+ pub enum SchemaTask {
+     /// Entity extraction task. Contains the list of label names (e.g., "person", "city").
+@@ -39,6 +59,9 @@
+     Relations(String, Vec<String>),
+     /// Text classification task. Contains the task name and classes (e.g., "sentiment", ["positive", "negative"]).
+     Classifications(String, Vec<String>),
++    /// Structured/JSON extraction task (PATCH go-gline-rs). Contains the structure
++    /// name and its fields (e.g., "product", [name::str, price::list, ...]).
++    Structure(String, Vec<StructField>),
+ }
+ 
+ #[derive(Debug, Clone)]
+@@ -48,6 +71,9 @@
+     pub labels: Vec<String>,
+     pub prompt_tok_idx: usize,
+     pub field_tok_indices: Vec<usize>,
++    /// Per-field dtypes, parallel to `labels`, for `json_structures` tasks
++    /// (empty for other task types).
++    pub field_dtypes: Vec<Dtype>,
+ }
+ 
+ #[derive(Debug, Clone)]
+@@ -140,10 +166,11 @@
+                     
+                     task_mappings_temp.push((
+                         "entities".to_string(),
+-                        "entities".to_string(), 
+-                        labels, 
+-                        prompt_idx, 
+-                        field_indices
++                        "entities".to_string(),
++                        labels,
++                        prompt_idx,
++                        field_indices,
++                        Vec::new()
+                     ));
+                 }
+                 SchemaTask::Relations(rel_name, fields) => {
+@@ -164,10 +191,11 @@
+                     
+                     task_mappings_temp.push((
+                         rel_name.clone(),
+-                        "relations".to_string(), 
+-                        labels, 
+-                        prompt_idx, 
+-                        field_indices
++                        "relations".to_string(),
++                        labels,
++                        prompt_idx,
++                        field_indices,
++                        Vec::new()
+                     ));
+                 }
+                 SchemaTask::Classifications(task_name, cls_labels) => {
+@@ -188,14 +216,45 @@
+                     
+                     task_mappings_temp.push((
+                         task_name.clone(),
+-                        "classifications".to_string(), 
+-                        labels, 
+-                        prompt_idx, 
+-                        field_indices
++                        "classifications".to_string(),
++                        labels,
++                        prompt_idx,
++                        field_indices,
++                        Vec::new()
++                    ));
++                }
++                SchemaTask::Structure(struct_name, fields) => {
++                    // PATCH (go-gline-rs): structured/JSON extraction.
++                    // Token shape mirrors entities but with the [C] child prefix:
++                    //   ( [P] <name> ( [C] field1 [C] field2 ... ) )
++                    combined_tokens.push("(");
++                    let prompt_idx = combined_tokens.len();
++                    combined_tokens.push(P_TOKEN);
++                    combined_tokens.push(struct_name.as_str());
++                    combined_tokens.push("(");
++
++                    let mut dtypes = Vec::new();
++                    for field in fields {
++                        combined_tokens.push(C_TOKEN);
++                        field_indices.push(combined_tokens.len());
++                        combined_tokens.push(field.name.as_str());
++                        labels.push(field.name.clone());
++                        dtypes.push(field.dtype);
++                    }
++                    combined_tokens.push(")");
++                    combined_tokens.push(")");
++
++                    task_mappings_temp.push((
++                        struct_name.clone(),
++                        "json_structures".to_string(),
++                        labels,
++                        prompt_idx,
++                        field_indices,
++                        dtypes
+                     ));
+                 }
+             }
+-            
++
+             if i < schema_tasks.len() - 1 {
+                 combined_tokens.push(SEP_STRUCT);
+             }
+@@ -251,18 +310,19 @@
+         let text_real_end = word_to_token_maps.last().map(|v| v.1).unwrap_or(0);
+ 
+         let mut tasks = Vec::new();
+-        for (task_name, task_type, labels, prompt_idx, field_indices) in task_mappings_temp {
++        for (task_name, task_type, labels, prompt_idx, field_indices, field_dtypes) in task_mappings_temp {
+             let real_prompt_idx = *combined_to_final_map.get(&prompt_idx).unwrap();
+             let real_field_indices: Vec<usize> = field_indices.iter()
+                 .map(|idx| *combined_to_final_map.get(idx).unwrap())
+                 .collect();
+-                
++
+             tasks.push(TaskMapping {
+                 task_name,
+                 task_type,
+                 labels,
+                 prompt_tok_idx: real_prompt_idx,
+                 field_tok_indices: real_field_indices,
++                field_dtypes,
+             });
+         }
+ 

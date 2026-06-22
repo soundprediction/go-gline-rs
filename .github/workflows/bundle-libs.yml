@@ -1,0 +1,72 @@
+name: Bundle native libs
+
+# Builds the gliner2_binding cdylib + a matching CPU onnxruntime for every supported
+# platform and commits the gzipped artifacts under pkg/gliner2/lib/ so the Go module
+# is self-contained (embedded via go:embed) for all of linux/macOS × x86_64/arm64.
+#
+# - linux-amd64 : ubuntu-latest
+# - linux-arm64 : ubuntu-24.04-arm
+# - darwin (both arches): macos-14 builds a universal2 binary (Intel macOS runners
+#   are being retired, so we cross-build x86_64 from Apple Silicon and lipo).
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [gliner2-onnx-binding]
+    paths: ['.github/workflows/bundle-libs.yml', 'scripts/build_gliner2.sh']
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build (${{ matrix.name }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { runner: ubuntu-latest,   name: linux-amd64 }
+          - { runner: ubuntu-24.04-arm, name: linux-arm64 }
+          - { runner: macos-14,        name: darwin }      # builds both Mac arches
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+      - name: Build + bundle native lib(s)
+        run: make gliner2
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: lib-${{ matrix.name }}
+          path: pkg/gliner2/lib/**/*.gz
+          if-no-files-found: error
+
+  commit:
+    name: Commit bundled libs
+    needs: build
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download all platform artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: /tmp/dl
+      - name: Merge artifacts into the lib tree and commit
+        run: |
+          set -euo pipefail
+          # Each artifact's root mirrors pkg/gliner2/lib (e.g. linux-arm64/, onnxruntime/...).
+          for d in /tmp/dl/lib-*; do
+            [ -d "$d" ] && cp -R "$d/." pkg/gliner2/lib/
+          done
+          find pkg/gliner2/lib -name '*.gz' -print
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add pkg/gliner2/lib
+          if git diff --cached --quiet; then
+            echo "No lib changes to commit."
+          else
+            git commit -m "ci: bundle native libs for linux+macOS (x86_64+arm64) [skip ci]"
+            git push origin HEAD:${GITHUB_REF_NAME}
+          fi

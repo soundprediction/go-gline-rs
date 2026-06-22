@@ -26,6 +26,8 @@ type Model struct {
 }
 
 // NewSpanModel loads a model in Span Mode
+//
+// Deprecated: use package gliner2 (gliner2.NewFromHuggingFace) instead.
 func NewSpanModel(modelPath, tokenizerPath string) (*Model, error) {
 	if !initialized {
 		return nil, errors.New("library not initialized")
@@ -44,6 +46,8 @@ func NewSpanModel(modelPath, tokenizerPath string) (*Model, error) {
 }
 
 // NewTokenModel loads a model in Token Mode
+//
+// Deprecated: use package gliner2 (gliner2.NewFromHuggingFace) instead.
 func NewTokenModel(modelPath, tokenizerPath string) (*Model, error) {
 	if !initialized {
 		return nil, errors.New("library not initialized")
@@ -62,6 +66,8 @@ func NewTokenModel(modelPath, tokenizerPath string) (*Model, error) {
 }
 
 // NewSpanModelFromHF loads a Span model directly from Hugging Face
+//
+// Deprecated: use gliner2.NewFromHuggingFace (package gliner2) instead.
 func NewSpanModelFromHF(modelID string) (*Model, error) {
 	modelPath, tokenizerPath, err := DownloadModel(modelID, "")
 	if err != nil {
@@ -71,6 +77,8 @@ func NewSpanModelFromHF(modelID string) (*Model, error) {
 }
 
 // NewTokenModelFromHF loads a Token model directly from Hugging Face
+//
+// Deprecated: use gliner2.NewFromHuggingFace (package gliner2) instead.
 func NewTokenModelFromHF(modelID string) (*Model, error) {
 	modelPath, tokenizerPath, err := DownloadModel(modelID, "")
 	if err != nil {
