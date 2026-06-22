@@ -1,0 +1,81 @@
+name: Bundle native libs
+
+# Builds the gliner2_binding cdylib + a matching CPU onnxruntime for every supported
+# platform (linux/macOS × x86_64/arm64) natively on the corresponding runner, then
+# commits the gzipped artifacts under pkg/gliner2/lib/ so the Go module is
+# self-contained (embedded via go:embed) for all platforms.
+#
+# Run manually from the Actions tab (workflow_dispatch). It commits to the branch it
+# runs on.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build (${{ matrix.platform }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-latest
+            platform: linux-amd64
+          - runner: ubuntu-24.04-arm
+            platform: linux-arm64
+          - runner: macos-13          # Intel
+            platform: darwin-amd64
+          - runner: macos-14          # Apple Silicon
+            platform: darwin-arm64
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+      - name: Build + bundle native lib for this platform
+        run: make gliner2
+      - name: Upload platform artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: lib-${{ matrix.platform }}
+          path: |
+            pkg/gliner2/lib/${{ matrix.platform }}/
+            pkg/gliner2/lib/onnxruntime/${{ matrix.platform }}/
+          if-no-files-found: error
+
+  commit:
+    name: Commit bundled libs
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download all platform artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: /tmp/libs
+      - name: Place artifacts under pkg/gliner2/lib
+        run: |
+          set -euxo pipefail
+          # Each artifact is lib-<platform>/ containing the platform's binding +
+          # onnxruntime subtrees mirrored from pkg/gliner2/lib.
+          for d in /tmp/libs/lib-*; do
+            plat="${d##*/lib-}"
+            mkdir -p "pkg/gliner2/lib/$plat" "pkg/gliner2/lib/onnxruntime/$plat"
+            [ -d "$d/$plat" ] && cp -f "$d/$plat"/*.gz "pkg/gliner2/lib/$plat/" || true
+            [ -d "$d/onnxruntime/$plat" ] && cp -f "$d/onnxruntime/$plat"/*.gz "pkg/gliner2/lib/onnxruntime/$plat/" || true
+          done
+          find pkg/gliner2/lib -name '*.gz' -print
+      - name: Commit
+        run: |
+          set -euo pipefail
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add pkg/gliner2/lib
+          if git diff --cached --quiet; then
+            echo "No lib changes to commit."
+          else
+            git commit -m "ci: bundle native libs for linux+macOS (x86_64+arm64) [skip ci]"
+            git push origin HEAD:${GITHUB_REF_NAME}
+          fi
