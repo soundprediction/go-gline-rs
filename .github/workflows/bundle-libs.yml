@@ -10,6 +10,11 @@ name: Bundle native libs
 
 on:
   workflow_dispatch:
+  # Also runnable before this lands on the default branch (where workflow_dispatch
+  # would be available). The bot's own commit carries [skip ci], so this does not loop.
+  push:
+    branches: [gliner2-onnx-binding]
+    paths: ['.github/workflows/bundle-libs.yml']
 
 permissions:
   contents: write
