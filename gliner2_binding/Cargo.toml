@@ -1,0 +1,26 @@
+[package]
+name = "gliner2_binding"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+name = "gliner2_binding"
+crate-type = ["cdylib"]
+
+[dependencies]
+# C FFI / runtime
+libc = "0.2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# GLiNER2 ONNX inference engine. Vendored from SemplificaAI/gliner2-rs @ v0.5.1
+# into third_party/ so we can carry local patches (classifier input dtype fix +
+# structured/JSON extraction). Runs on GPU or CPU via ort's execution-provider
+# fallback chain (load-dynamic; needs libonnxruntime at runtime).
+gliner2_inference = { path = "../third_party/gliner2_inference" }
+
+# Direct dependency on ort solely to control feature unification: gliner2_inference
+# uses `default-features = false` and omits ort's `ndarray` feature, but its code calls
+# the ndarray-gated `try_extract_tensor`. Re-declaring ort here with `ndarray` turns that
+# feature on for the whole graph. Version/EP features mirror gliner2_inference exactly.
+ort = { version = "=2.0.0-rc.9", default-features = false, features = ["load-dynamic", "ndarray", "half", "qnn", "cuda", "rocm", "coreml", "openvino", "directml", "tensorrt", "xnnpack"] }

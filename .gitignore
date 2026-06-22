@@ -22,3 +22,6 @@ target/
 .vscode/
 .idea/
 *.swp
+
+# Vendored upstream engine source (fetched + patched by scripts/setup_gliner2_inference.sh)
+/third_party/
