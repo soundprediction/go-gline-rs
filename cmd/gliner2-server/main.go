@@ -33,17 +33,27 @@ import (
 
 func main() {
 	var (
-		addr      = flag.String("addr", envOr("GLINER2_ADDR", ":8080"), "listen address")
-		repo      = flag.String("repo", envOr("GLINER2_MODEL", "SemplificaAI/gliner2-multi-v1-onnx"), "Hugging Face model repo id")
-		variant   = flag.String("variant", envOr("GLINER2_VARIANT", "fp32_v2"), "model variant subfolder (e.g. fp32_v2, fp16_v2); empty for repo root")
-		modelType = flag.String("model-type", envOr("GLINER2_MODEL_TYPE", "huggingface"), "model type: huggingface or pytorch")
-		apiKey    = flag.String("api-key", firstEnv("GLINER2_API_KEY", "PIONEER_API_KEY"), "if set, require this key in the X-API-Key header")
+		addr       = flag.String("addr", envOr("GLINER2_ADDR", ":8080"), "listen address")
+		repo       = flag.String("repo", envOr("GLINER2_MODEL", "SemplificaAI/gliner2-multi-v1-onnx"), "Hugging Face model repo id")
+		variant    = flag.String("variant", envOr("GLINER2_VARIANT", "fp32_v2"), "model variant subfolder (e.g. fp32_v2, fp16_v2); empty for repo root")
+		modelType  = flag.String("model-type", envOr("GLINER2_MODEL_TYPE", "huggingface"), "model type: huggingface or pytorch")
+		apiKey     = flag.String("api-key", firstEnv("GLINER2_API_KEY", "PIONEER_API_KEY"), "if set, require this key in the X-API-Key header")
+		requireGPU = flag.Bool("require-gpu", envBool("GLINER2_REQUIRE_GPU"), "fail startup unless ONNXRuntime exposes CUDAExecutionProvider")
 	)
 	flag.Parse()
 
 	mt := gliner2.ModelTypeHuggingFace
 	if *modelType == "pytorch" {
 		mt = gliner2.ModelTypePyTorch
+	}
+
+	providers, err := gliner2.AvailableONNXProviders()
+	if err != nil {
+		log.Fatalf("inspect ONNXRuntime providers: %v", err)
+	}
+	log.Printf("onnxruntime providers: %s", strings.Join(providers, ","))
+	if *requireGPU && !gliner2.HasONNXProvider(providers, "CUDAExecutionProvider") {
+		log.Fatalf("GLINER2_REQUIRE_GPU is set but CUDAExecutionProvider is unavailable; ORT_DYLIB_PATH=%q", os.Getenv("ORT_DYLIB_PATH"))
 	}
 
 	log.Printf("loading model %q (variant %q)…", *repo, *variant)
@@ -523,6 +533,15 @@ func envOr(key, def string) string {
 		return v
 	}
 	return def
+}
+
+func envBool(key string) bool {
+	switch strings.ToLower(strings.TrimSpace(os.Getenv(key))) {
+	case "1", "true", "yes", "y", "on":
+		return true
+	default:
+		return false
+	}
 }
 
 func firstEnv(keys ...string) string {

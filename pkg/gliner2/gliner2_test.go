@@ -55,6 +55,16 @@ func TestResultDecode(t *testing.T) {
 	}
 }
 
+func TestAvailableONNXProviders(t *testing.T) {
+	providers, err := AvailableONNXProviders()
+	if err != nil {
+		t.Skipf("native onnxruntime not available: %v", err)
+	}
+	if !HasONNXProvider(providers, "CPUExecutionProvider") {
+		t.Fatalf("providers = %v, want CPUExecutionProvider", providers)
+	}
+}
+
 // TestExtractSmoke runs a real extraction when the native library is built and
 // present; otherwise it skips (the pure-Go tests above cover the marshaling).
 func TestExtractSmoke(t *testing.T) {

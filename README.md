@@ -99,6 +99,20 @@ Pick the model variant to match: `fp32_v2` for CPU, `fp16_v2` for GPU. fp16 on C
 is slow/unsupported (no native fp16 compute), so there is no default — choose per
 deployment.
 
+For GPU deployments that must not silently fall back to CPU, run the HTTP server
+with `--require-gpu` or `GLINER2_REQUIRE_GPU=1`. Startup inspects the selected
+`libonnxruntime` and exits unless `CUDAExecutionProvider` is available:
+
+```bash
+export ORT_DYLIB_PATH=/opt/onnxruntime/lib/libonnxruntime.so
+export LD_LIBRARY_PATH=/opt/onnxruntime/lib:${LD_LIBRARY_PATH}
+GLINER2_REQUIRE_GPU=1 \
+  go run ./cmd/gliner2-server \
+  --addr :8080 \
+  --repo SemplificaAI/gliner2-multi-v1-onnx \
+  --variant fp16_v2
+```
+
 ## HTTP microservice (drop-in for `GLiNER2.from_api()`)
 
 `cmd/gliner2-server` implements the official GLiNER2 cloud API endpoint
